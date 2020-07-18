@@ -2,7 +2,7 @@ server:
   host: 0.0.0.0:9528
 
 log:
-  level: info
+  level: debug
   filepath: "dev.log"
 
 storage:

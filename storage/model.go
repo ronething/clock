@@ -631,7 +631,9 @@ func AddScheduler(c *Container) error {
 
 func PutContainer(c Container) error {
 	// 移除并重新启用
-	scheduler.Remove(cron.EntryID(c.EntryId))
+	if c.EntryId >= 0 { // c.EntryId == -1 || c.EntryId == 0 , -1 表示 disable、0 表示新增
+		scheduler.Remove(cron.EntryID(c.EntryId))
+	}
 	c.UpdateAt = time.Now().Unix()
 	if c.Disable {
 		c.EntryId = -1

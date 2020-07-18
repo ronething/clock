@@ -97,8 +97,7 @@ func RunSingleTask(t Task) error {
 	logrus.Debugf("[%v] - now will run the task [%s]", t.Tid, t.Name)
 	Db.Save(&t)
 
-	args := strings.Split(t.Command, " ")
-	c := exec.Command(args[0], args[1:]...)
+	c := exec.Command("/bin/bash", "-c", t.Command)
 	c.Stdout = &stdOutBuf
 	c.Stderr = &stdErrBuf
 
