@@ -2,8 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"time"
 
 	"github.com/fatih/structs"
@@ -15,7 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"clock/config"
-	"clock/param"
 )
 
 var (
@@ -33,50 +30,29 @@ const (
 )
 
 type (
-	// 容器ID
-	Container struct {
-		Cid        int    `json:"cid" gorm:"PRIMARY_KEY"`  // 主键
-		EntryId    int    `json:"entry_id"`                // 由cron 生成的id
-		Name       string `json:"name"`                    // 名字
-		Expression string `json:"expression"`              // 表达式 支持@every [1s | 1m | 1h ] 参考 cron
-		Status     int    `json:"status" gorm:"default:1"` // 当前状态
-		Disable    bool   `json:"disable"`                 // 禁用
-		UpdateAt   int64  `json:"update_at"`               // 修改时间
-	}
 
 	// 当前任务
 	Task struct {
-		Tid       int    `json:"tid" gorm:"PRIMARY_KEY"`        // task id
-		Cid       int    `json:"cid" gorm:"index:task_idx_cid"` // 容器id
-		Command   string `json:"command"`                       // 当前只支持bash command
-		Name      string `json:"name"`                          // task 名字
-		Directory string `json:"directory"`                     // 命令所在的目录
-		Disable   bool   `json:"disable"`                       // 是否禁用当前任务
-		Status    int    `json:"status" gorm:"default:1"`       // 当前状态
-		TimeOut   int    `json:"timeout"`                       // 超时时间
-		UpdateAt  int64  `json:"update_at"`                     // 修改时间
-		LogEnable bool   `json:"log_enable"`                    // 是否启用日志
-		PointX    int    `json:"point_x"`                       // 坐标 x 信息
-		PointY    int    `json:"point_y"`                       // 坐标 y 信息
-	}
-
-	// 任务关系
-	Relation struct {
-		Rid      int   `json:"rid" gorm:"PRIMARY_KEY"`                    // 关系ID
-		Cid      int   `json:"cid" gorm:"index"`                          // 容器ID
-		Tid      int   `json:"tid" gorm:"unique_index:uidx_tid_sid"`      // 任务ID
-		NextTid  int   `json:"next_tid" gorm:"unique_index:uidx_tid_sid"` // 子任务ID
-		UpdateAt int64 `json:"update_at"`                                 // 修改时间
+		Tid        int    `json:"tid" gorm:"PRIMARY_KEY"`            // task id
+		Command    string `json:"command"`                           // 当前只支持bash command
+		Name       string `json:"name" gorm:"unique_index;not null"` // task 名字
+		Disable    bool   `json:"disable"`                           // 是否禁用当前任务
+		Status     int    `json:"status" gorm:"default:1"`           // 当前状态
+		TimeOut    int    `json:"timeout"`                           // 超时时间
+		CreateAt   int64  `json:"create_at"`                         // 创建时间
+		UpdateAt   int64  `json:"update_at"`                         // 修改时间
+		LogEnable  bool   `json:"log_enable"`                        // 是否启用日志
+		Expression string `json:"expression"`                        // 表达式 支持@every [1s | 1m | 1h ] 参考 cron
+		EntryId    int    `json:"entry_id"`                          // 调度器生成的 id
 	}
 
 	// 任务日志
 	TaskLog struct {
 		Lid      string `json:"lid"  gorm:"PRIMARY_KEY"`  // 主键Key
 		Tid      int    `json:"tid" gorm:"index:idx_tid"` // task id
-		Cid      int    `json:"cid" gorm:"index"`         // 绑定容器ID
 		StdOut   string `json:"std_out"`                  // 正常输出流
 		StdErr   string `json:"std_err"`                  // 异常输出流
-		UpdateAt int64  `json:"update_at" gorm:"index"`   // 创建时间
+		CreateAt int64 `json:"create_at" gorm:"index"` // 创建时间
 	}
 )
 
@@ -94,11 +70,6 @@ type (
 	TaskQuery struct {
 		Page
 		Task
-	}
-
-	ContainerQuery struct {
-		Page
-		Container
 	}
 
 	LogQuery struct {
@@ -160,8 +131,7 @@ func SetDb() {
 		logrus.Fatal(err)
 	}
 
-	Db.AutoMigrate(&Task{}, &Container{}, &TaskLog{}, &Relation{})
-	newScheduler()
+	Db.AutoMigrate(&Task{}, &TaskLog{})
 
 	tmp := config.Config.GetInt("message.size")
 	if tmp > 0 {
@@ -176,31 +146,6 @@ func NewMessenger(size int) Message {
 		Size:    size,
 		Channel: make(chan string, size),
 	}
-}
-
-func newScheduler() {
-	optLogs := cron.WithLogger(
-		cron.VerbosePrintfLogger(
-			log.New(os.Stdout, "[Cron]: ", log.LstdFlags)))
-
-	scheduler = cron.New(optLogs)
-	var containers []Container
-	Db.Find(&containers)
-
-	if len(containers) > 0 {
-		for _, c := range containers {
-			// 默认清空之前的状态
-			c.Status = PENDING
-			c.EntryId = -1
-			c.UpdateAt = time.Now().Unix()
-			if err := PutContainer(c); err != nil {
-				logrus.Fatalf("[scheduler] error to init the task with error %v", err)
-			}
-		}
-	}
-
-	logrus.Info("[scheduler] start the ticker")
-	scheduler.Start()
 }
 
 func GetWhereDb(object interface{}, filter []string) *gorm.DB {
@@ -279,36 +224,6 @@ func GetTasks(query *TaskQuery) ([]Task, error) {
 	return tasks, nil
 }
 
-func GetContainers(query *ContainerQuery) ([]Container, error) {
-	var container []Container
-
-	if query.Count < 1 {
-		query.Count = 10
-	}
-
-	if query.Index < 1 {
-		query.Index = 1
-	}
-
-	queryDB := GetWhereDb(query, nil)
-	if e := queryDB.Model(container).Count(&query.Total).Error; e != nil {
-		logrus.Error("failed to get the page total of containers :" + e.Error())
-		return nil, e
-	}
-
-	queryDB = queryDB.Offset((query.Index - 1) * query.Count).Limit(query.Count)
-
-	if query.Order != "" {
-		queryDB = queryDB.Order(query.Order)
-	}
-
-	if err := queryDB.Find(&container).Error; err != nil {
-		return nil, err
-	}
-
-	return container, nil
-}
-
 // 更新query 多页的情况
 func GetLogs(query *LogQuery) ([]TaskLog, error) {
 	var logs []TaskLog
@@ -359,104 +274,6 @@ func DeleteLogs(query *LogQuery) error {
 	return queryDB.Delete(TaskLog{}).Error
 }
 
-// 返回相关内容
-func GetRelations(cid int) (param.RelationResponse, error) {
-	var relations []Relation
-	var tasks []Task
-	resp := param.RelationResponse{}
-
-	err := Db.Where("cid = ?", cid).Find(&tasks).Error
-	if err != nil {
-		return resp, err
-	}
-
-	if len(tasks) < 1 {
-		return resp, nil
-	}
-
-	if err := Db.Where(" cid = ?", cid).Find(&relations).Error; err != nil {
-		return resp, nil
-	}
-
-	return makeRelation(tasks, relations)
-
-}
-
-// 检测容器内是否存在闭环
-func CheckCircle(tasks []Task, relations []Relation) bool {
-	var result = false
-
-	if len(tasks) < 1 || len(relations) < 1 {
-		return result
-	}
-
-	for {
-		// 终止条件
-		if len(tasks) < 1 {
-			break
-		}
-		var rootTids []int
-
-		// 初使化入度
-		query := make(map[int]int)
-		for _, item := range tasks {
-			query[item.Tid] = 0
-		}
-
-		// 计算入度
-		for _, item := range relations {
-			v, ok := query[item.NextTid]
-			if !ok {
-				continue
-			}
-			query[item.NextTid] = v + 1
-		}
-
-		// 筛选入度
-		for k, v := range query {
-			if v == 0 {
-				rootTids = append(rootTids, k)
-			}
-		}
-
-		// 存在环
-		if len(rootTids) < 1 {
-			result = true
-			break
-		}
-
-		// 移除节点
-		var tmpTasks []Task
-		for _, item := range tasks {
-			if !contains(rootTids, item.Tid) {
-				tmpTasks = append(tmpTasks, item)
-			}
-		}
-
-		// 移除关系
-		var tmpRelations []Relation
-		for _, item := range relations {
-			if !contains(rootTids, item.Tid) {
-				tmpRelations = append(tmpRelations, item)
-			}
-		}
-
-		tasks = tmpTasks
-		relations = tmpRelations
-	}
-
-	return result
-}
-
-func contains(s []int, e int) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
 func inCondition(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {
@@ -466,59 +283,6 @@ func inCondition(s []string, e string) bool {
 	return false
 }
 
-// 更新坐标信息
-func PutNodes(nodes []Node) error {
-	for _, v := range nodes {
-		t, e := GetTask(v.ID)
-		if e != nil {
-			continue
-		}
-
-		t.PointX = v.X
-		t.PointY = v.Y
-
-		Db.Save(&t)
-	}
-	return nil
-}
-
-func makeRelation(tasks []Task, relations []Relation) (param.RelationResponse, error) {
-	var nodes []Node
-	var links []Link
-
-	resp := param.RelationResponse{}
-
-	if len(tasks) < 1 {
-		return resp, nil
-	}
-
-	for _, item := range tasks {
-		node := Node{
-			ID:     item.Tid,
-			Name:   item.Name,
-			Status: item.Status,
-			X:      item.PointX,
-			Y:      item.PointY,
-		}
-		nodes = append(nodes, node)
-	}
-
-	for _, item := range relations {
-		link := Link{
-			ID:      item.Rid,
-			Name:    "",
-			Tid:     item.Tid,
-			NextTid: item.NextTid,
-		}
-		links = append(links, link)
-	}
-
-	resp.Nodes = nodes
-	resp.Links = links
-
-	return resp, nil
-}
-
 func GetTask(tid int) (Task, error) {
 	var t Task
 
@@ -526,16 +290,6 @@ func GetTask(tid int) (Task, error) {
 		return t, err
 	}
 	return t, nil
-}
-
-func GetContainer(cid int) (Container, error) {
-	var c Container
-
-	if err := Db.Where("cid = ?", cid).First(&c).Error; err != nil {
-		return c, err
-	}
-
-	return c, nil
 }
 
 // 直接执行任务
@@ -549,100 +303,34 @@ func RunTask(tid int) error {
 	return RunSingleTask(task)
 }
 
-// 删除容器 - 删除关联task
-func DeleteContainer(cid int) error {
-	c, e := GetContainer(cid)
-
-	if e != nil {
-		logrus.Errorf("[delete container] error to find the container %v with error : %v", cid, e)
-		return e
-	}
-
-	scheduler.Remove(cron.EntryID(c.EntryId))
-
-	if e := Db.Delete(c).Error; e != nil {
-		logrus.Errorf("[delete container] error to delete the container %v with error : %v", cid, e)
-		return e
-	}
-
-	if e := Db.Delete(Task{}, " cid = ?", cid).Error; e != nil {
-		logrus.Errorf("[delete container] error to find the tasks with cid %v with error : %v", cid, e)
-		return e
-	}
-
-	return nil
-}
-
 // 删除任务
 func DeleteTask(tid int) error {
+	// 1、查询出来
+	var task Task
+	if err := Db.Where("tid = ?", tid).Find(&task).Error; err != nil {
+		return err
+	}
+	// TODO: 2、pub 到 redis
+
+	// 2、删除数据库中的 task
 	// 使用事物进行原子操作
-	return Db.Transaction(func(tx *gorm.DB) error {
-		if err := Db.Where(" tid = ?", tid).Delete(Task{}).Error; err != nil {
-			return err
-		}
-
-		if err := Db.Where(" tid = ?", tid).Delete(Relation{}).Error; err != nil {
-			return err
-		}
-
-		if err := Db.Where(" next_tid = ?", tid).Delete(Relation{}).Error; err != nil {
-			return err
-		}
-		// 回填用户token状态
-		return nil
-	})
+	if err := Db.Delete(&task).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 // 更新任务或者新增任务
 func PutTask(t *Task) error {
+	if t.Tid == 0 { // 新增
+		t.CreateAt = time.Now().Unix()
+	}
 	t.UpdateAt = time.Now().Unix()
-	return Db.Save(&t).Error
-}
+	// TODO: pub to redis
 
-// 新增关系
-func AddRelation(r *Relation) error {
-	return Db.Save(&r).Error
-}
-
-// 移除状态
-func DeleteRelation(rid int) error {
-	return Db.Where("rid = ?", rid).Delete(&Relation{}).Error
-}
-
-// 添加任务，需要传入指针,方便修改值
-func AddScheduler(c *Container) error {
-	f := func() {
-		if e := RunContainer(*c); e != nil {
-			logrus.Error(e)
-		}
+	if err := Db.Save(&t).Error; err != nil {
+		return err
 	}
-
-	entryId, e := scheduler.AddFunc(c.Expression, f)
-	if e != nil {
-		logrus.Error(e)
-		return e
-	}
-
-	c.EntryId = int(entryId)
-	logrus.Infof("[add scheduler] add the job of %s , with entry id %v", c.Name, c.EntryId)
-
+	logrus.Debugf("%s task is ", t)
 	return nil
-}
-
-func PutContainer(c Container) error {
-	// 移除并重新启用
-	if c.EntryId >= 0 { // c.EntryId == -1 || c.EntryId == 0 , -1 表示 disable、0 表示新增
-		scheduler.Remove(cron.EntryID(c.EntryId))
-	}
-	c.UpdateAt = time.Now().Unix()
-	if c.Disable {
-		c.EntryId = -1
-	} else {
-		err := AddScheduler(&c)
-		if err != nil {
-			logrus.Errorf("[put task] error with %v", err)
-		}
-	}
-
-	return Db.Save(&c).Error
 }

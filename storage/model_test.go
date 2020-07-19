@@ -17,7 +17,7 @@ func TestFindOne(t *testing.T) {
 func TestGetTasks(t *testing.T) {
 	q := TaskQuery{}
 
-	q.Cid = 1
+	//q.Cid = 1
 	q.Count = 1
 	q.Index = 2
 	q.Order = "tid desc"

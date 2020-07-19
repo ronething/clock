@@ -2,15 +2,11 @@ package server
 
 import (
 	"clock/param"
-	"net/http"
 	"strings"
 
-	"github.com/gobuffalo/packr/v2"
+	"clock/controller"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	log "github.com/sirupsen/logrus"
-
-	"clock/controller"
 )
 
 func addApi(e *echo.Echo) {
@@ -22,7 +18,7 @@ func addApi(e *echo.Echo) {
 	// 使用jwt token验证
 	v1 := e.Group("/v1")
 	{
-		v1.Use(middleware.JWTWithConfig(createJWTConfig()))
+		//v1.Use(middleware.JWTWithConfig(createJWTConfig())) 暂时取消登录中间件
 		t := v1.Group("/task")
 		{
 			t.GET("", controller.GetTasks)
@@ -42,27 +38,6 @@ func addApi(e *echo.Echo) {
 		u := v1.Group("/login")
 		{
 			u.POST("", controller.Login)
-		}
-
-		r := v1.Group("/relation")
-		{
-			r.GET("", controller.GetRelations)
-			r.POST("", controller.AddRelation)
-			r.DELETE("/:rid", controller.DeleteRelation)
-		}
-
-		n := v1.Group("/node")
-		{
-			n.PUT("", controller.PutNodes)
-		}
-
-		c := v1.Group("/container")
-		{
-			c.GET("", controller.GetContainers)
-			c.GET("/:cid", controller.GetContainer)
-			c.PUT("", controller.PutContainer)
-			c.GET("/run", controller.RunContainer)
-			c.DELETE("/:cid", controller.DeleteContainer)
 		}
 
 		// 消息中心
@@ -112,28 +87,10 @@ func createJWTConfig() middleware.JWTConfig {
 	return d
 }
 
-func addApp(e *echo.Echo) {
-	webapp := packr.New("webapp", "../webapp")
-
-	app, err := webapp.FindString("index.html")
-	if err != nil {
-		log.Fatalf("not find the index.html of app : %v", err)
-	}
-
-	static := packr.New("static", "../webapp")
-
-	e.GET("/*", echo.WrapHandler(http.StripPrefix("/", http.FileServer(static))))
-	e.GET("/app", func(c echo.Context) error {
-		return c.HTML(200, app)
-	})
-
-}
-
 func CreateEngine() (*echo.Echo, error) {
 	e := echo.New()
 
 	addApi(e)
-	addApp(e)
 
 	return e, nil
 }

@@ -7,9 +7,6 @@ import (
 )
 
 var (
-	// 数据库相关
-	DBConn = ""
-
 	// 应用相关
 	WebUser = ""
 	WebPwd  = ""
@@ -35,13 +32,6 @@ func SetStatic() {
 		logrus.Fatal("empty login.jwt")
 	} else {
 		WebJwt = tmp
-	}
-
-	if tmp := config.Config.GetString("storage.conn"); tmp == "" {
-		logrus.Fatal("empty login.user")
-	} else {
-		logrus.Println("[param] load DbConn")
-		DBConn = tmp
 	}
 
 }
