@@ -46,6 +46,8 @@ func main() {
 	// 初始化调度器
 	scheduler.NewScheduler()
 
+	go scheduler.SubCronJob()
+
 	for {
 		time.Sleep(1 * time.Second)
 	}

@@ -26,16 +26,6 @@ https://github.com/ronething/clock
 
 使用命令`./clock -c config/dev.yaml` 载入你的配置文件
 
-## 结构
-```
-├── config - 配置文件夹,示例文件所在
-├── controller - 控制层
-├── param - 参数相关
-├── runner - 执行器
-├── server - view层
-├── storage - 存储相关
-```
-
 ## 特性与功能
 * 支持多种数据库: sqlite , mysql ,postgresql
 * 跨平台

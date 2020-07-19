@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"github.com/vmihailenco/msgpack/v5"
 	"time"
 
 	"github.com/fatih/structs"
@@ -28,6 +29,12 @@ const (
 	START
 	SUCCESS
 	FAILURE
+)
+
+// 任务增删事件
+const (
+	PUT = iota + 1
+	DEL
 )
 
 type (
@@ -100,8 +107,8 @@ type (
 
 	// redis 传输对象
 	TaskEvent struct {
-		Event string `json:"event"` // PUT/DEL
-		Task  *Task  `json:"task"`
+		Event int  `json:"event"` // PUT/DEL
+		Task  Task `json:"task"`
 	}
 )
 
@@ -316,10 +323,25 @@ func DeleteTask(tid int) error {
 	if err := Db.Where("tid = ?", tid).Find(&task).Error; err != nil {
 		return err
 	}
-	// TODO: 2、pub 到 redis
-
+	// DONE: 2、pub 到 redis
+	channelName := "cron"
+	e := TaskEvent{
+		Event: DEL,
+		Task:  task,
+	}
+	m, err := msgpack.Marshal(e)
+	logrus.Debugf("[model] 发布消息到 redis %v", e)
+	if err != nil {
+		logrus.Errorf("[model] 序列化错误 %s", err.Error())
+		return err
+	}
+	if err := Rdb.Publish(context.Background(), channelName, m).Err(); err != nil {
+		logrus.Errorf("[model] 发布消息到 redis 失败 %s", err.Error())
+		return err
+	}
+	// 即使 redis publish 有问题，数据库中的任务删除后，
+	// 因为每次 worker RunTask 都会从数据库中取出数据，所以如果数据库的任务被删除了, worker 中也无法跑这个任务
 	// 2、删除数据库中的 task
-	// 使用事物进行原子操作
 	if err := Db.Delete(&task).Error; err != nil {
 		return err
 	}
@@ -331,10 +353,39 @@ func PutTask(t *Task) error {
 	if t.Tid == 0 { // 新增
 		t.CreateAt = time.Now().Unix()
 	}
-	t.UpdateAt = time.Now().Unix()
-	// TODO: pub to redis
+	oldTask, err := GetTask(t.Tid)
+	if err != nil {
+		logrus.Debugf("[model] 没有对应的 task %s", err.Error())
+		return err
+	}
+	// 数据融合赋值，如果没有传 name/command 则赋值上原来的 db.Save() 保存的是结构体的所有字段的值
+	t.CreateAt = oldTask.CreateAt
+	if t.Name == "" {
+		t.Name = oldTask.Name
+	}
+	if t.Command == "" {
+		t.Command = oldTask.Command
+	}
 
+	t.UpdateAt = time.Now().Unix()
+	// 注意要先进行存储 task 的 tid 会被赋值，然后再带过去 redis
 	if err := Db.Save(&t).Error; err != nil {
+		return err
+	}
+	// DONE: pub to redis
+	channelName := "cron"
+	e := TaskEvent{
+		Event: PUT,
+		Task:  *t,
+	}
+	m, err := msgpack.Marshal(e)
+	logrus.Debugf("[model] 发布消息到 redis %v", e)
+	if err != nil {
+		logrus.Errorf("[model] 序列化错误 %s", err.Error())
+		return err
+	}
+	if err := Rdb.Publish(context.Background(), channelName, m).Err(); err != nil {
+		logrus.Errorf("[model] 发布消息到 redis 失败 %s", err.Error())
 		return err
 	}
 	return nil

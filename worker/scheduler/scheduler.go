@@ -7,8 +7,11 @@ package scheduler
 
 import (
 	"clock/storage"
+	"context"
+	"github.com/go-redis/redis/v8"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
+	"github.com/vmihailenco/msgpack/v5"
 	"log"
 	"os"
 	"time"
@@ -64,17 +67,9 @@ func PutTask(t storage.Task) error {
 
 }
 
-func DeleteTask(tid int) error {
-	// 1、查询出来
-	var task storage.Task
-	if err := storage.Db.Where("tid = ?", tid).Find(&task).Error; err != nil {
-		return err
-	}
-	// TODO: 2、pub 到 redis
-
-	// 2、调度器删除对应任务
-	scheduler.Remove(cron.EntryID(task.Tid))
-
+//DeleteTask 调度器删除对应任务
+func DeleteTask(eid int) error {
+	scheduler.Remove(cron.EntryID(eid)) // 删除的是 entry id，不是 task id
 	return nil
 }
 
@@ -96,4 +91,47 @@ func AddScheduler(t *storage.Task) error {
 	logrus.Infof("[add scheduler] add the job of %s , with entry id %v", t.Name, t.EntryId)
 
 	return nil
+}
+
+//SubCronJob 订阅频道用于更新任务
+func SubCronJob() {
+	ctx := context.Background()
+	channelName := "cron"
+	pubsub := storage.Rdb.Subscribe(ctx, channelName)
+
+	defer pubsub.Close()
+
+	for {
+		// ReceiveTimeout is a low level API. Use ReceiveMessage instead.
+		msgi, err := pubsub.Receive(ctx)
+		if err != nil {
+			goto End
+		}
+		switch msg := msgi.(type) {
+		case *redis.Subscription:
+			logrus.Infof("成功订阅 %s", channelName)
+		case *redis.Message:
+			t := storage.TaskEvent{}
+			if err := msgpack.Unmarshal([]byte(msg.Payload), &t); err != nil {
+				logrus.Errorf("[scheduler] msg 解析发生错误")
+			}
+			logrus.Debugf("[scheduler] taskEvent is %v", t)
+			if t.Event == storage.PUT {
+				if err := PutTask(t.Task); err != nil {
+					logrus.Errorf("[scheduler] PUT 事件失败 %s", err.Error())
+				}
+			} else if t.Event == storage.DEL {
+				if err := DeleteTask(t.Task.EntryId); err != nil {
+					logrus.Errorf("[scheduler] DEL 事件失败 %s", err.Error())
+				}
+			} else { // 后续拓展 不过应该不需要
+
+			}
+		default:
+			logrus.Warnf("[scheduler] 默认是什么鬼 %v", msg)
+			goto End
+		}
+	}
+End:
+	logrus.Errorf("[scheduler] 订阅消息发生错误")
 }
