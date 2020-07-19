@@ -8,6 +8,7 @@ require (
 	github.com/fatih/structs v1.1.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/go-redis/redis/v8 v8.0.0-beta.6
 	github.com/jinzhu/gorm v1.9.14
 	github.com/labstack/echo/v4 v4.1.16
 	github.com/lib/pq v1.7.0 // indirect
@@ -24,8 +25,8 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.0
-	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/valyala/fasttemplate v1.1.1 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1 // indirect
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899 // indirect
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae // indirect

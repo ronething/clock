@@ -1,15 +1,16 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/fatih/structs"
+	"github.com/go-redis/redis/v8"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
-	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 
 	"clock/config"
@@ -17,7 +18,7 @@ import (
 
 var (
 	Db          *gorm.DB
-	scheduler   *cron.Cron
+	Rdb         *redis.Client
 	Messenger   Message
 	MessageSize = 1000
 )
@@ -52,7 +53,9 @@ type (
 		Tid      int    `json:"tid" gorm:"index:idx_tid"` // task id
 		StdOut   string `json:"std_out"`                  // 正常输出流
 		StdErr   string `json:"std_err"`                  // 异常输出流
-		CreateAt int64 `json:"create_at" gorm:"index"` // 创建时间
+		StartAt  int64  `json:"start_at"`                 // 任务开始时间
+		EndAt    int64  `json:"end_at"`                   // 任务结束时间
+		CreateAt int64  `json:"create_at" gorm:"index"`   // 创建时间
 	}
 )
 
@@ -80,24 +83,8 @@ type (
 
 // 应用所需实体
 type (
-	// 关系Node节点
-	Node struct {
-		ID     int    `json:"id"`
-		Name   string `json:"name"`
-		Status int    `json:"status"`
-		X      int    `json:"x"`
-		Y      int    `json:"y"`
-	}
 
-	// 关系Link
-	Link struct {
-		ID      int    `json:"id"`
-		Name    string `json:"name"`
-		Cid     int    `json:"cid"`      // 容器ID
-		Tid     int    `json:"tid"`      // 当前节点ID
-		NextTid int    `json:"next_tid"` // 子任务ID
-	}
-
+	// websocket 消息
 	Message struct {
 		Size    int         //容量
 		Channel chan string //信息通道
@@ -109,6 +96,12 @@ type (
 		Icon  string `json:"icon"`
 		Count int    `json:"count"`
 		Color string `json:"color"`
+	}
+
+	// redis 传输对象
+	TaskEvent struct {
+		Event string `json:"event"` // PUT/DEL
+		Task  *Task  `json:"task"`
 	}
 )
 
@@ -133,11 +126,23 @@ func SetDb() {
 
 	Db.AutoMigrate(&Task{}, &TaskLog{})
 
+	Rdb = redis.NewClient(&redis.Options{
+		Addr:     config.Config.GetString("cache.redis.addr"),
+		Password: config.Config.GetString("cache.redis.auth"),
+		DB:       config.Config.GetInt("cache.redis.db"),
+	})
+	pong, err := Rdb.Ping(context.Background()).Result()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	logrus.Debugf("[storage] rdb ping res is %s", pong)
+
 	tmp := config.Config.GetInt("message.size")
 	if tmp > 0 {
 		MessageSize = tmp
 	}
 	Messenger = NewMessenger(MessageSize)
+
 }
 
 // 初使化信息通道
@@ -300,7 +305,8 @@ func RunTask(tid int) error {
 		return err
 	}
 
-	return RunSingleTask(task)
+	go RunSingleTask(task) // 改为协程中运行
+	return nil
 }
 
 // 删除任务
@@ -331,6 +337,5 @@ func PutTask(t *Task) error {
 	if err := Db.Save(&t).Error; err != nil {
 		return err
 	}
-	logrus.Debugf("%s task is ", t)
 	return nil
 }

@@ -1,10 +1,10 @@
 package server
 
 import (
-	"clock/param"
+	"clock/master/param"
 	"strings"
 
-	"clock/controller"
+	"clock/master/controller"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )

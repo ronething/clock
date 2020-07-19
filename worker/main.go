@@ -1,14 +1,19 @@
+// author: ashing
+// time: 2020/7/19 12:07 下午
+// mail: axingfly@gmail.com
+// Less is more.
+
 package main
 
 import (
 	"clock/config"
-	"clock/param"
-	"clock/server"
+	"clock/master/param"
 	"clock/storage"
+	"clock/worker/scheduler"
 	"flag"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"os"
+	"time"
 )
 
 var (
@@ -23,7 +28,6 @@ Options:
 `)
 	flag.PrintDefaults()
 }
-
 func main() {
 	flag.StringVar(&filePath, "c", "./config.yaml", "配置文件所在")
 	flag.BoolVar(&help, "h", false, "帮助")
@@ -39,19 +43,11 @@ func main() {
 	param.SetStatic()
 	storage.SetDb()
 
-	defer storage.Db.Close()
-	address := config.Config.GetString("server.host")
-	if address == "" {
-		logrus.Fatal("can not find any server host config")
-	}
+	// 初始化调度器
+	scheduler.NewScheduler()
 
-	engine, err := server.CreateEngine()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	if e := engine.Start(address); e != nil {
-		logrus.Fatal(e)
+	for {
+		time.Sleep(1 * time.Second)
 	}
 
 }

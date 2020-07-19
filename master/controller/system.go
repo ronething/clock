@@ -11,7 +11,7 @@ import (
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
 
-	"clock/param"
+	"clock/master/param"
 )
 
 type PieData struct {
@@ -81,7 +81,7 @@ func GetCpuUsage(c echo.Context) error {
 		Data: nil,
 	}
 
-	v, e := cpu.Percent(time.Duration(1*time.Second), true)
+	v, e := cpu.Percent(1*time.Second, true)
 	if e != nil {
 		resp.Msg = fmt.Sprintf("[get cpu usage] error to get the task param with: %v", e)
 		logrus.Error(resp.Msg)

@@ -9,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 
-	"clock/param"
+	"clock/master/param"
 )
 
 // 登录后回token

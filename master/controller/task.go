@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"clock/param"
+	"clock/master/param"
 	"clock/storage"
 
 	"github.com/labstack/echo/v4"
