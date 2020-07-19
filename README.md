@@ -14,9 +14,31 @@ https://github.com/ronething/clock
     * [msgpack](https://github.com/vmihailenco/msgpack) 序列化
 
 ## 使用
+
 ### 直接使用
-下载git上的release列表，根据系统下载相应的二进制文件，使用命令
+
+下载 relase 中的文件, 需要启动一个 redis 服务器,数据库可以考虑用 sqlite3，也可以使用 mysql 等
+
 ```
+# ronething @ ashings-macbook-pro in /tmp/clock [18:17:21] C:130
+$ ll
+total 99264
+-rw-r--r--  1 ronething  wheel    32K  7 19 18:17 clock.db
+-rw-r--r--  1 ronething  wheel   521B  7 19 18:05 dev.yaml
+-rwxr-xr-x  1 ronething  wheel    26M  7 19 18:12 master
+-rwxr-xr-x  1 ronething  wheel    23M  7 19 18:05 worker
+
+# ronething @ ashings-macbook-pro in /tmp/clock [18:17:21] C:130
+$ ./master -c ./dev.yaml
+
+# ronething @ ashings-macbook-pro in /tmp/clock [18:17:21] C:130
+$ ./worker -c ./dev.yaml
+
+```
+
+### 自行构建
+```
+# 进入项目目录
 # 分别在 master 和 worker 目录下进行构建
 cd master && go build
 ./master -c ../config/dev.yaml
@@ -67,3 +89,71 @@ cd worker && go build
 			l.DELETE("", controller.DeleteLogs)
 		}
 ```
+
+### 效果
+
+```sh
+# ronething @ ashings-macbook-pro in /tmp/clock [18:07:20]
+$ curl -X PUT \
+  http://127.0.0.1:9528/v1/task \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "command": "sleep 5;echo job10",
+    "name": "job1",
+    "log_enable": true,
+    "expression": "*/3 * * * * *"
+}'
+{"code":200,"msg":"success","data":1}
+```
+
+```json
+# ronething @ ashings-macbook-pro in /tmp/clock [18:12:50]
+# 查看 log
+$ curl -X GET "http://127.0.0.1:9528/v1/log" | jq
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  1456  100  1456    0     0   189k      0 --:--:-- --:--:-- --:--:--  203k
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "items": [
+      {
+        "lid": "b6420f9b",
+        "tid": 1,
+        "std_out": "job10\n",
+        "std_err": "",
+        "start_at": 1595153520,
+        "end_at": 1595153525,
+        "create_at": 1595153525
+      },
+      {
+        "lid": "91cc293f",
+        "tid": 1,
+        "std_out": "job10\n",
+        "std_err": "",
+        "start_at": 1595153514,
+        "end_at": 1595153519,
+        "create_at": 1595153519
+      }
+    ],
+    "page": {
+      "count": 10,
+      "index": 1,
+      "total": 35,
+      "order": "",
+      "left_ts": 0,
+      "right_ts": 0,
+      "lid": "",
+      "tid": 0,
+      "std_out": "",
+      "std_err": "",
+      "start_at": 0,
+      "end_at": 0,
+      "create_at": 0
+    }
+  }
+}
+```
+
+![terminal-01.png](./images/terminal-01.png)

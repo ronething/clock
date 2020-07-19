@@ -250,11 +250,11 @@ func GetLogs(query *LogQuery) ([]TaskLog, error) {
 
 	queryDB := GetWhereDb(query, []string{"lid"})
 	if query.LeftTs > 0 {
-		queryDB = queryDB.Where("update_at > ?", query.LeftTs)
+		queryDB = queryDB.Where("create_at > ?", query.LeftTs)
 	}
 
 	if query.RightTs > 0 {
-		queryDB = queryDB.Where("update_at < ?", query.RightTs)
+		queryDB = queryDB.Where("create_at < ?", query.RightTs)
 	}
 
 	if e := queryDB.Model(logs).Count(&query.Total).Error; e != nil {
@@ -262,7 +262,7 @@ func GetLogs(query *LogQuery) ([]TaskLog, error) {
 		return nil, e
 	}
 
-	queryDB = queryDB.Offset((query.Index - 1) * query.Count).Limit(query.Count).Order("update_at desc")
+	queryDB = queryDB.Offset((query.Index - 1) * query.Count).Limit(query.Count).Order("create_at desc")
 	if err := queryDB.Find(&logs).Error; err != nil {
 		return nil, err
 	}
@@ -275,11 +275,11 @@ func DeleteLogs(query *LogQuery) error {
 	queryDB := GetWhereDb(query, []string{"lid"})
 
 	if query.LeftTs > 0 {
-		queryDB = queryDB.Where("update_at > ?", query.LeftTs)
+		queryDB = queryDB.Where("create_at > ?", query.LeftTs)
 	}
 
 	if query.RightTs > 0 {
-		queryDB = queryDB.Where("update_at < ?", query.RightTs)
+		queryDB = queryDB.Where("create_at < ?", query.RightTs)
 	}
 
 	queryDB.LogMode(true)
@@ -352,19 +352,20 @@ func DeleteTask(tid int) error {
 func PutTask(t *Task) error {
 	if t.Tid == 0 { // 新增
 		t.CreateAt = time.Now().Unix()
-	}
-	oldTask, err := GetTask(t.Tid)
-	if err != nil {
-		logrus.Debugf("[model] 没有对应的 task %s", err.Error())
-		return err
-	}
-	// 数据融合赋值，如果没有传 name/command 则赋值上原来的 db.Save() 保存的是结构体的所有字段的值
-	t.CreateAt = oldTask.CreateAt
-	if t.Name == "" {
-		t.Name = oldTask.Name
-	}
-	if t.Command == "" {
-		t.Command = oldTask.Command
+	} else { // 存在
+		oldTask, err := GetTask(t.Tid)
+		if err != nil {
+			logrus.Debugf("[model] 没有对应的 task %s", err.Error())
+			return err
+		}
+		// 数据融合赋值，如果没有传 name/command 则赋值上原来的 db.Save() 保存的是结构体的所有字段的值
+		t.CreateAt = oldTask.CreateAt
+		if t.Name == "" {
+			t.Name = oldTask.Name
+		}
+		if t.Command == "" {
+			t.Command = oldTask.Command
+		}
 	}
 
 	t.UpdateAt = time.Now().Unix()
