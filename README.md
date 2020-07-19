@@ -1,9 +1,5 @@
-<div align=center>
-<img src="https://user-images.githubusercontent.com/12979090/86565300-297abd80-bf9a-11ea-916f-b547f5023ee8.png" /> 
-</div>
-
 ## Clock
-基于go cron的可视化调度轻量级调度框架，支持DAG任务依赖，支持bash命令
+基于 go cron 和 redis 实现分布式任务调度(支持多 worker，多 master)
 
 ## 地址
 https://github.com/ronething/clock
@@ -21,11 +17,53 @@ https://github.com/ronething/clock
 ### 直接使用
 下载git上的release列表，根据系统下载相应的二进制文件，使用命令
 ```
-./clock -c ./config/dev.yaml
+# 分别在 master 和 worker 目录下进行构建
+cd master && go build
+./master -c ../config/dev.yaml
+
+cd worker && go build
+./worker -c ../config/dev.yaml
 ```
 
-使用命令`./clock -c config/dev.yaml` 载入你的配置文件
+### Api
 
-## 特性与功能
-* 支持多种数据库: sqlite , mysql ,postgresql
-* 跨平台
+- 获取所有任务
+
+`GET /v1/task`
+
+- 获取单个任务
+
+`GET /v1/task/:tid`
+
+- 更新单个任务
+
+`PUT /v1/task`
+
+- 删除单个任务
+
+`DEL /v1/task/:tid`
+
+- 获取日志
+
+`GET /v1/log`
+
+```go
+	v1 := e.Group("/v1")
+	{
+		//v1.Use(middleware.JWTWithConfig(createJWTConfig())) 暂时取消登录中间件
+		t := v1.Group("/task")
+		{
+			t.GET("", controller.GetTasks)
+			t.GET("/:tid", controller.GetTask)
+			t.PUT("", controller.PutTask)
+			t.GET("/run", controller.RunTask)
+			t.DELETE("/:tid", controller.DeleteTask)
+			t.GET("/status", controller.GetTaskStatus)
+		}
+
+		l := v1.Group("/log")
+		{
+			l.GET("", controller.GetLogs)
+			l.DELETE("", controller.DeleteLogs)
+		}
+```
