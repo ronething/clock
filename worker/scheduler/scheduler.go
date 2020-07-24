@@ -6,20 +6,24 @@
 package scheduler
 
 import (
+	"clock/config"
 	"clock/storage"
 	"context"
+	"log"
+	"os"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v5"
-	"log"
-	"os"
-	"time"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 var scheduler *cron.Cron
 
-func NewScheduler() {
+//NewScheduler 创建调度器
+func NewScheduler() error {
 	optLogs := cron.WithLogger(
 		cron.VerbosePrintfLogger(
 			log.New(os.Stdout, "[Cron]: ", log.LstdFlags)))
@@ -28,9 +32,24 @@ func NewScheduler() {
 		cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
 	))
 
-	scheduler = cron.New(optLogs, optParser)
-	var tasks []storage.Task
-	storage.Db.Find(&tasks)
+	// DONE: +12 时区调度器 Pacific/Wake
+	location, err := time.LoadLocation(config.Config.GetString("scheduler.timezone"))
+	if err != nil {
+		logrus.Errorf("[scheduler] load time location err: %v", err)
+		return err
+	}
+	optLocation := cron.WithLocation(location)
+	scheduler = cron.New(optLogs, optParser, optLocation)
+	tasks := make([]storage.Task, 0)
+	cursor, err := storage.TaskCol.Find(context.Background(), bson.M{})
+	if err != nil {
+		logrus.Errorf("[scheduler] get all tasks err: %v", err)
+		return err
+	}
+	if err = cursor.All(context.Background(), &tasks); err != nil {
+		logrus.Errorf("[message] 加载数据失败: %v", err)
+		return err
+	}
 
 	if len(tasks) > 0 {
 		for _, t := range tasks {
@@ -46,16 +65,20 @@ func NewScheduler() {
 
 	logrus.Info("[scheduler] start the ticker")
 	scheduler.Start()
+
+	return nil
 }
 
 func PutTask(t storage.Task) error {
 	// 移除并重新启用
 	if t.EntryId > 0 { // c.EntryId == -1 || c.EntryId == 0 , -1 表示 disable、0 表示新增
+		logrus.Debugf("[scheduler] remove cron job with entry id: %v", t.EntryId)
 		scheduler.Remove(cron.EntryID(t.EntryId))
 	}
 	t.UpdateAt = time.Now().Unix()
 	if t.Disable {
 		t.EntryId = -1
+		logrus.Debugf("[scheduler] set cron entryId to -1")
 	} else {
 		err := AddScheduler(&t)
 		if err != nil {
@@ -63,7 +86,20 @@ func PutTask(t storage.Task) error {
 		}
 	}
 
-	return storage.Db.Save(&t).Error
+	res, err := storage.TaskCol.UpdateOne(context.Background(), bson.D{{"_id", t.Id}}, bson.D{{
+		"$set",
+		bson.D{ // 只会更新这两个 key
+			{"update_at", t.UpdateAt},
+			{"entry_id", t.EntryId},
+		},
+	}})
+	if err != nil {
+		logrus.Errorf("[scheduler] put task update err: %v", err)
+		return err
+	}
+	logrus.Debugf("[scheduler] match: %v, modify: %v", res.MatchedCount, res.ModifiedCount)
+
+	return nil
 
 }
 
@@ -77,13 +113,13 @@ func DeleteTask(eid int) error {
 func AddScheduler(t *storage.Task) error {
 	f := func() {
 		if e := storage.RunTask(t.Tid); e != nil {
-			logrus.Error(e)
+			logrus.Errorf("[scheduler] exec task %s err: %v", t.Tid, e)
 		}
 	}
 
 	entryId, e := scheduler.AddFunc(t.Expression, f)
 	if e != nil {
-		logrus.Error(e)
+		logrus.Errorf("[scheduler] add func to scheduler err: %v", e)
 		return e
 	}
 
@@ -93,10 +129,15 @@ func AddScheduler(t *storage.Task) error {
 	return nil
 }
 
+//StopScheduler 停止调度器
+func StopScheduler() context.Context {
+	return scheduler.Stop()
+}
+
 //SubCronJob 订阅频道用于更新任务
-func SubCronJob() {
+func SubCronJob(c chan os.Signal) {
 	ctx := context.Background()
-	channelName := "cron"
+	channelName := config.Config.GetString("pubsub.channel")
 	pubsub := storage.Rdb.Subscribe(ctx, channelName)
 
 	defer pubsub.Close()
@@ -133,5 +174,6 @@ func SubCronJob() {
 		}
 	}
 End:
-	logrus.Errorf("[scheduler] 订阅消息发生错误")
+	c <- os.Interrupt //手动发送信号给 c
+	logrus.Errorf("[scheduler] 消息订阅发生错误")
 }

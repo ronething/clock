@@ -11,15 +11,11 @@ import (
 	"clock/storage"
 )
 
-// 列表
+//GetLogs 列表
 func GetLogs(c echo.Context) (err error) {
 	var query storage.LogQuery
 
-	resp := param.ApiResponse{
-		Code: 200,
-		Msg:  "success",
-		Data: nil,
-	}
+	resp := param.BuildResp()
 
 	if err := c.Bind(&query); err != nil {
 		resp.Msg = fmt.Sprintf("[get logs] error to get the query param with: %v", err)
@@ -44,15 +40,11 @@ func GetLogs(c echo.Context) (err error) {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// 清除多少天之前的日志
+//DeleteLogs 清除多少天之前的日志
 func DeleteLogs(c echo.Context) error {
 	var query storage.LogQuery
 
-	resp := param.ApiResponse{
-		Code: 200,
-		Msg:  "success",
-		Data: nil,
-	}
+	resp := param.BuildResp()
 
 	if err := c.Bind(&query); err != nil {
 		resp.Msg = fmt.Sprintf("[delete logs] error to get the query param with: %v", err)

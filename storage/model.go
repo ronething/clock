@@ -1,31 +1,21 @@
 package storage
 
 import (
-	"context"
+	"errors"
 	"fmt"
-	"github.com/vmihailenco/msgpack/v5"
-	"time"
+	"reflect"
+	"strings"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/fatih/structs"
-	"github.com/go-redis/redis/v8"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/sirupsen/logrus"
-
-	"clock/config"
-)
-
-var (
-	Db          *gorm.DB
-	Rdb         *redis.Client
-	Messenger   Message
-	MessageSize = 1000
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 const (
-	PENDING = iota + 1
+	UNKNOWN = iota
+	PENDING
 	START
 	SUCCESS
 	FAILURE
@@ -37,32 +27,54 @@ const (
 	DEL
 )
 
+// mongo 排序
+const (
+	DESC = -1
+	ASC  = 1
+)
+
+// 作业类型
+const (
+	BashTask = "bash"
+	HTTPTask = "http"
+)
+
+var (
+	WaitForNextScheduleErr = errors.New("key 存在/value 设置不成功，等待下次调度")
+)
+
 type (
 
 	// 当前任务
 	Task struct {
-		Tid        int    `json:"tid" gorm:"PRIMARY_KEY"`            // task id
-		Command    string `json:"command"`                           // 当前只支持bash command
-		Name       string `json:"name" gorm:"unique_index;not null"` // task 名字
-		Disable    bool   `json:"disable"`                           // 是否禁用当前任务
-		Status     int    `json:"status" gorm:"default:1"`           // 当前状态
-		TimeOut    int    `json:"timeout"`                           // 超时时间
-		CreateAt   int64  `json:"create_at"`                         // 创建时间
-		UpdateAt   int64  `json:"update_at"`                         // 修改时间
-		LogEnable  bool   `json:"log_enable"`                        // 是否启用日志
-		Expression string `json:"expression"`                        // 表达式 支持@every [1s | 1m | 1h ] 参考 cron
-		EntryId    int    `json:"entry_id"`                          // 调度器生成的 id
+		Id         primitive.ObjectID `json:"-" bson:"_id,omitempty"`       // mongo object id  omitempty ,之后不能有空格
+		Tid        string             `json:"tid" bson:"tid"`               // task id -> Id.Hex()
+		Name       string             `json:"name" bson:"name"`             // task 名字 TODO: 唯一索引
+		Disable    bool               `json:"disable" bson:"disable"`       // 是否禁用当前任务
+		Status     int                `json:"status" bson:"status"`         // 当前状态
+		TimeOut    int                `json:"timeout" bson:"timeout"`       // 超时时间
+		CreateAt   int64              `json:"create_at" bson:"create_at"`   // 创建时间
+		UpdateAt   int64              `json:"update_at" bson:"update_at"`   // 修改时间
+		LogEnable  bool               `json:"log_enable" bson:"log_enable"` // 是否启用日志
+		Expression string             `json:"expression" bson:"expression"` // 表达式 支持@every [1s | 1m | 1h ] 参考 cron
+		EntryId    int                `json:"entry_id" bson:"entry_id"`     // 调度器生成的 id
+		// payload 请求体
+		// 如果 type 是 bash，则 payload 需要有 command？
+		// 如果是 http，则需要有 url，method，以及 data
+		Payload map[string]interface{} `json:"payload" bson:"payload"`
+		Type    string                 `json:"type" bson:"type"` // 目前支持两种类型 bash 和 http
 	}
 
 	// 任务日志
 	TaskLog struct {
-		Lid      string `json:"lid"  gorm:"PRIMARY_KEY"`  // 主键Key
-		Tid      int    `json:"tid" gorm:"index:idx_tid"` // task id
-		StdOut   string `json:"std_out"`                  // 正常输出流
-		StdErr   string `json:"std_err"`                  // 异常输出流
-		StartAt  int64  `json:"start_at"`                 // 任务开始时间
-		EndAt    int64  `json:"end_at"`                   // 任务结束时间
-		CreateAt int64  `json:"create_at" gorm:"index"`   // 创建时间
+		Id       primitive.ObjectID `json:"-" bson:"_id,omitempty"`     // mongo object id
+		Lid      string             `json:"lid"  bson:"lid"`            // 主键Key
+		Tid      string             `json:"tid" bson:"tid"`             // task id TODO: 索引 加速查询
+		StdOut   string             `json:"std_out" bson:"std_out"`     // 正常输出流
+		StdErr   string             `json:"std_err" bson:"std_err"`     // 异常输出流
+		StartAt  int64              `json:"start_at" bson:"start_at"`   // 任务开始时间
+		EndAt    int64              `json:"end_at" bson:"end_at"`       // 任务结束时间
+		CreateAt int64              `json:"create_at" bson:"create_at"` // 创建时间
 	}
 )
 
@@ -110,61 +122,37 @@ type (
 		Event int  `json:"event"` // PUT/DEL
 		Task  Task `json:"task"`
 	}
+
+	// BashTask
+	BashTaskPayload struct {
+		Command string `json:"command"`
+	}
+
+	// HTTPTask
+	HTTPTaskPayload struct {
+		EndPoint string      `json:"endpoint"`
+		Prefix   string      `json:"prefix"`
+		Method   string      `json:"method"`
+		Data     interface{} `json:"data"`
+	}
 )
 
-// 初使化
-func SetDb() {
-	conn := config.Config.GetString("storage.conn")
-	if conn == "" {
-		logrus.Fatal("empty conn string")
+// inCondition 判断 s 中的某个元素是否和 e 相同
+func inCondition(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
 	}
-
-	backend := config.Config.GetString("storage.backend")
-	if backend == "" {
-		logrus.Fatal("not find the backend type")
-	}
-
-	var err error
-	Db, err = gorm.Open(backend, conn)
-
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	Db.AutoMigrate(&Task{}, &TaskLog{})
-
-	Rdb = redis.NewClient(&redis.Options{
-		Addr:     config.Config.GetString("cache.redis.addr"),
-		Password: config.Config.GetString("cache.redis.auth"),
-		DB:       config.Config.GetInt("cache.redis.db"),
-	})
-	pong, err := Rdb.Ping(context.Background()).Result()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Debugf("[storage] rdb ping res is %s", pong)
-
-	tmp := config.Config.GetInt("message.size")
-	if tmp > 0 {
-		MessageSize = tmp
-	}
-	Messenger = NewMessenger(MessageSize)
-
+	return false
 }
 
-// 初使化信息通道
-func NewMessenger(size int) Message {
-	return Message{
-		Size:    size,
-		Channel: make(chan string, size),
-	}
-}
-
-func GetWhereDb(object interface{}, filter []string) *gorm.DB {
-	db := Db
-	// 过滤bool 和子类型为struct内容
+//GetWhereDb 进行条件预筛选
+func GetWhereDb(object interface{}, filter []string) bson.D {
+	var doc bson.D
+	// 过滤 bool 和子类型为 struct 内容
 	filterKind := []string{"bool", "struct"}
-	// 过滤Page参数体
+	// 过滤 Page 参数体
 	filterStruct := []string{"Page"}
 
 	s := structs.New(object)
@@ -177,7 +165,8 @@ func GetWhereDb(object interface{}, filter []string) *gorm.DB {
 
 		fields := tmp.Fields()
 		for _, f := range fields {
-			field := f.Tag("json")
+			field := f.Tag("bson")
+			field = strings.Split(field, ",")[0]
 
 			// 过滤的字段
 			if inCondition(filter, field) {
@@ -185,209 +174,41 @@ func GetWhereDb(object interface{}, filter []string) *gorm.DB {
 			}
 
 			kind := fmt.Sprintf("%v", f.Kind())
-			// 过滤bool类型和struct类型
+			// 过滤 bool 类型和 struct 类型
 			if inCondition(filterKind, kind) {
 				continue
 			}
 
 			value := fmt.Sprintf("%v", f.Value())
 			if kind == "string" && value != "" {
-				db = db.Where(fmt.Sprintf("%v like ?", field), "%"+value+"%")
+				// TODO: like
+				doc = append(doc, bson.E{Key: field, Value: value})
 			}
 
 			if kind == "int" && value != "0" {
-				db = db.Where(fmt.Sprintf("%v = ?", field), value)
+				doc = append(doc, bson.E{Key: field, Value: value})
 			}
 
 		}
 	}
 
-	return db
+	return doc
 }
 
-// 默认取出根任务
-func GetTasks(query *TaskQuery) ([]Task, error) {
-	var tasks []Task
+//Struct2bsonD 结构体转为 bson
+func Struct2bsonD(i interface{}) bson.D {
+	doc := bson.D{}
+	t := reflect.TypeOf(i)
+	v := reflect.ValueOf(i)
 
-	if query.Count < 1 {
-		query.Count = 10
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("bson")
+		doc = append(doc, bson.E{
+			Key:   strings.Split(tag, ",")[0], // 取出第一个 _id,omitempty
+			Value: v.Field(i).Interface(),
+		})
 	}
+	logrus.Debugf("[model] bson is %v", doc)
 
-	if query.Index < 1 {
-		query.Index = 1
-	}
-
-	queryDB := GetWhereDb(query, nil)
-	if e := queryDB.Model(tasks).Count(&query.Total).Error; e != nil {
-		logrus.Error("failed to get the page total of tasks :" + e.Error())
-		return nil, e
-	}
-
-	queryDB = queryDB.Offset((query.Index - 1) * query.Count).Limit(query.Count)
-
-	if query.Order != "" {
-		queryDB = queryDB.Order(query.Order)
-	}
-
-	if err := queryDB.Find(&tasks).Error; err != nil {
-		return nil, err
-	}
-
-	return tasks, nil
-}
-
-// 更新query 多页的情况
-func GetLogs(query *LogQuery) ([]TaskLog, error) {
-	var logs []TaskLog
-
-	if query.Count < 1 {
-		query.Count = 10
-	}
-
-	if query.Index < 1 {
-		query.Index = 1
-	}
-
-	queryDB := GetWhereDb(query, []string{"lid"})
-	if query.LeftTs > 0 {
-		queryDB = queryDB.Where("create_at > ?", query.LeftTs)
-	}
-
-	if query.RightTs > 0 {
-		queryDB = queryDB.Where("create_at < ?", query.RightTs)
-	}
-
-	if e := queryDB.Model(logs).Count(&query.Total).Error; e != nil {
-		logrus.Error("failed to get the page total of logs :" + e.Error())
-		return nil, e
-	}
-
-	queryDB = queryDB.Offset((query.Index - 1) * query.Count).Limit(query.Count).Order("create_at desc")
-	if err := queryDB.Find(&logs).Error; err != nil {
-		return nil, err
-	}
-
-	return logs, nil
-}
-
-// 根据ts 删除多久以前的数据
-func DeleteLogs(query *LogQuery) error {
-	queryDB := GetWhereDb(query, []string{"lid"})
-
-	if query.LeftTs > 0 {
-		queryDB = queryDB.Where("create_at > ?", query.LeftTs)
-	}
-
-	if query.RightTs > 0 {
-		queryDB = queryDB.Where("create_at < ?", query.RightTs)
-	}
-
-	queryDB.LogMode(true)
-	return queryDB.Delete(TaskLog{}).Error
-}
-
-func inCondition(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
-func GetTask(tid int) (Task, error) {
-	var t Task
-
-	if err := Db.Where("tid = ?", tid).First(&t).Error; err != nil {
-		return t, err
-	}
-	return t, nil
-}
-
-// 直接执行任务
-func RunTask(tid int) error {
-	task, err := GetTask(tid)
-	if err != nil {
-		logrus.Errorf("error to find the task with: %v", err)
-		return err
-	}
-
-	go RunSingleTask(task) // 改为协程中运行
-	return nil
-}
-
-// 删除任务
-func DeleteTask(tid int) error {
-	// 1、查询出来
-	var task Task
-	if err := Db.Where("tid = ?", tid).Find(&task).Error; err != nil {
-		return err
-	}
-	// DONE: 2、pub 到 redis
-	channelName := "cron"
-	e := TaskEvent{
-		Event: DEL,
-		Task:  task,
-	}
-	m, err := msgpack.Marshal(e)
-	logrus.Debugf("[model] 发布消息到 redis %v", e)
-	if err != nil {
-		logrus.Errorf("[model] 序列化错误 %s", err.Error())
-		return err
-	}
-	if err := Rdb.Publish(context.Background(), channelName, m).Err(); err != nil {
-		logrus.Errorf("[model] 发布消息到 redis 失败 %s", err.Error())
-		return err
-	}
-	// 即使 redis publish 有问题，数据库中的任务删除后，
-	// 因为每次 worker RunTask 都会从数据库中取出数据，所以如果数据库的任务被删除了, worker 中也无法跑这个任务
-	// 2、删除数据库中的 task
-	if err := Db.Delete(&task).Error; err != nil {
-		return err
-	}
-	return nil
-}
-
-// 更新任务或者新增任务
-func PutTask(t *Task) error {
-	if t.Tid == 0 { // 新增
-		t.CreateAt = time.Now().Unix()
-	} else { // 存在
-		oldTask, err := GetTask(t.Tid)
-		if err != nil {
-			logrus.Debugf("[model] 没有对应的 task %s", err.Error())
-			return err
-		}
-		// 数据融合赋值，如果没有传 name/command 则赋值上原来的 db.Save() 保存的是结构体的所有字段的值
-		t.CreateAt = oldTask.CreateAt
-		if t.Name == "" {
-			t.Name = oldTask.Name
-		}
-		if t.Command == "" {
-			t.Command = oldTask.Command
-		}
-	}
-
-	t.UpdateAt = time.Now().Unix()
-	// 注意要先进行存储 task 的 tid 会被赋值，然后再带过去 redis
-	if err := Db.Save(&t).Error; err != nil {
-		return err
-	}
-	// DONE: pub to redis
-	channelName := "cron"
-	e := TaskEvent{
-		Event: PUT,
-		Task:  *t,
-	}
-	m, err := msgpack.Marshal(e)
-	logrus.Debugf("[model] 发布消息到 redis %v", e)
-	if err != nil {
-		logrus.Errorf("[model] 序列化错误 %s", err.Error())
-		return err
-	}
-	if err := Rdb.Publish(context.Background(), channelName, m).Err(); err != nil {
-		logrus.Errorf("[model] 发布消息到 redis 失败 %s", err.Error())
-		return err
-	}
-	return nil
+	return doc
 }

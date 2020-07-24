@@ -1,17 +1,17 @@
 package controller
 
 import (
+	"clock/master/param"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
-
-	"clock/master/param"
 )
 
 type PieData struct {
@@ -20,11 +20,8 @@ type PieData struct {
 }
 
 func GetLoadAverage(c echo.Context) error {
-	resp := param.ApiResponse{
-		Code: 200,
-		Msg:  "success",
-		Data: nil,
-	}
+
+	resp := param.BuildResp()
 
 	v, e := load.Avg()
 	if e != nil {
@@ -44,11 +41,8 @@ func GetLoadAverage(c echo.Context) error {
 }
 
 func GetMemoryUsage(c echo.Context) error {
-	resp := param.ApiResponse{
-		Code: 200,
-		Msg:  "success",
-		Data: nil,
-	}
+
+	resp := param.BuildResp()
 
 	v, e := mem.VirtualMemory()
 	if e != nil {
@@ -75,11 +69,7 @@ func GetMemoryUsage(c echo.Context) error {
 }
 
 func GetCpuUsage(c echo.Context) error {
-	resp := param.ApiResponse{
-		Code: 200,
-		Msg:  "success",
-		Data: nil,
-	}
+	resp := param.BuildResp()
 
 	v, e := cpu.Percent(1*time.Second, true)
 	if e != nil {

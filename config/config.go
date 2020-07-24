@@ -15,7 +15,7 @@ func SetConfig(filePath string) {
 	Config = viper.New()
 	Config.SetConfigFile(filePath)
 	if err := Config.ReadInConfig(); err != nil {
-		log.Fatal(err)
+		log.Fatalf("[config] read config err: %v", err)
 	}
 
 	// set log by default

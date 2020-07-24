@@ -1,22 +1,22 @@
 package controller
 
 import (
+	"clock/master/param"
+	"context"
 	"fmt"
 	"net/http"
+
+	"go.mongodb.org/mongo-driver/bson"
 
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 
-	"clock/master/param"
 	"clock/storage"
 )
 
+//GetMessages
 func GetMessages(c echo.Context) error {
-	resp := param.ApiResponse{
-		Code: 200,
-		Msg:  "success",
-		Data: nil,
-	}
+	resp := param.BuildResp()
 
 	counters, err := getMessages()
 	if err != nil {
@@ -29,11 +29,16 @@ func GetMessages(c echo.Context) error {
 }
 
 func getMessages() ([]storage.TaskCounter, error) {
-	var tasks []storage.Task
-	var counters []storage.TaskCounter
+	tasks := make([]storage.Task, 0)
+	counters := make([]storage.TaskCounter, 0)
 
-	if err := storage.Db.Find(&tasks).Error; err != nil {
-		logrus.Errorf("[get messages] error to get tasks with error : %v", err)
+	cursor, err := storage.TaskCol.Find(context.Background(), bson.M{})
+	if err != nil {
+		logrus.Errorf("[message] get all tasks err: %v", err)
+		return counters, err // 返回 counters 而不返回 nil，这样可以判断 length 是 0
+	}
+	if err = cursor.All(context.Background(), &tasks); err != nil {
+		logrus.Errorf("[message] 加载数据失败: %v", err)
 		return counters, err
 	}
 

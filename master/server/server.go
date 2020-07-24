@@ -1,10 +1,8 @@
 package server
 
 import (
-	"clock/master/param"
-	"strings"
-
 	"clock/master/controller"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -35,11 +33,6 @@ func addApi(e *echo.Echo) {
 			l.DELETE("", controller.DeleteLogs)
 		}
 
-		u := v1.Group("/login")
-		{
-			u.POST("", controller.Login)
-		}
-
 		// 消息中心
 		m := v1.Group("/message")
 		{
@@ -54,37 +47,6 @@ func addApi(e *echo.Echo) {
 		}
 	}
 
-}
-
-func createJWTConfig() middleware.JWTConfig {
-	d := middleware.DefaultJWTConfig
-
-	d.SigningKey = []byte(param.WebJwt)
-	d.TokenLookup = "header:token"
-	d.AuthScheme = "duckduckgo"
-
-	filterUri := []string{"webapp", "js", "css"}
-
-	d.Skipper = func(c echo.Context) bool {
-		uri := c.Request().RequestURI
-		if strings.Contains(uri, "/v1/login") {
-			return true
-		}
-
-		for _, v := range filterUri {
-			if strings.Contains(uri, v) {
-				return true
-			}
-		}
-
-		if strings.Contains(uri, "/v1/task/status") {
-			return true
-		}
-
-		return false
-	}
-
-	return d
 }
 
 func CreateEngine() (*echo.Echo, error) {

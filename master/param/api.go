@@ -7,19 +7,6 @@ type (
 		Index int `query:"index" json:"index"`
 		Total int `json:"total"`
 	}
-
-	// 用户信息
-	User struct {
-		UserName string `json:"user_name"`
-		UserPwd  string `json:"user_pwd"`
-	}
-
-	// 关系节点查询
-	NodeQuery struct {
-		Page
-		KeyWord string `query:"keyword" json:"keyword"` // 查询关键字
-		TaskID  int    `query:"task_id" json:"task_id"`
-	}
 )
 
 // 返回
@@ -35,9 +22,13 @@ type (
 		Items     interface{} `json:"items"`
 		PageQuery interface{} `json:"page"`
 	}
-
-	RelationResponse struct {
-		Nodes interface{} `json:"nodes"`
-		Links interface{} `json:"links"`
-	}
 )
+
+//BuildResp 通用 resp
+func BuildResp() ApiResponse {
+	return ApiResponse{
+		Code: 200,
+		Msg:  "success",
+		Data: nil,
+	}
+}

@@ -5,18 +5,10 @@ log:
   level: debug
   filepath: "dev.log"
 
-storage:
-  #pg
-  #backend: "postgres"
-  #conn: "host=127.0.0.1 port=5432 user=clock dbname=clock password=clock sslmode=disable"
-
-  # sqlite
-#  backend: "sqlite3"
-#  conn: "clock.db"
-
-  # mysql
-  backend: "mysql"
-  conn: "root:root@tcp(127.0.0.1:3306)/clock?charset=utf8&parseTime=True&loc=Local"
+database:
+  mongo:
+    conn: "mongodb://127.0.0.1:27017/clock?maxPoolSize=10&retryWrites=true&connect=direct"
+    db: "clock"
 
 cache:
   redis:
@@ -24,11 +16,18 @@ cache:
     auth: ""
     db: 6
 
+lease:
+  prefix: "cron:job" # 分布式锁锁前缀
+  per: 20 # 周期 s
+  expire: 120 # 每次续约多久 s
 
-login:
-  user: "admin"
-  pwd: "admin"
-  jwt: "helloClock$"
+scheduler:
+  timezone: "Asia/Shanghai"
+
+# TODO: 加个开关，如果关了 master 就不发布到 redis
+pubsub:
+  channel: "cron"
+#  open: true
 
 message:
   size: 1000

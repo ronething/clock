@@ -8,16 +8,16 @@ https://github.com/ronething/clock
 * 后端
     * go 1.13+
     * [cron](https://github.com/robfig/cron) - 定时调度器
-    * [echo](https://github.com/labstack/echo) - web framework
-    * [gorm](https://github.com/jinzhu/gorm) - database orm
-    * [go-redis](https://github.com/go-redis/redis)  - redis client
-    * [msgpack](https://github.com/vmihailenco/msgpack) 序列化
+    * [echo](https://github.com/labstack/echo) - web 框架
+    * [mongo-go-driver](https://github.com/mongodb/mongo-go-driver) - mongo 驱动
+    * [go-redis](https://github.com/go-redis/redis)  - redis 客户端
+    * [msgpack](https://github.com/vmihailenco/msgpack) - redis 信息传输序列化
 
 ## 使用
 
 ### 直接使用
 
-下载 relase 中的文件, 需要启动一个 redis 服务器,数据库可以考虑用 sqlite3，也可以使用 mysql 等
+下载 release 中的文件, 需要启动一个 redis 服务器,数据库使用 mongo
 
 ```
 # ronething @ ashings-macbook-pro in /tmp/clock [18:17:21] C:130
@@ -47,8 +47,20 @@ cd worker && go build
 ./worker -c ../config/dev.yaml
 ```
 
+### docker 构建
+
+注： `go mod vendor` 很重要，如果更新了 go.mod 请执行此命令对 vendor 文件夹进行更新
+
+```sh
+make docker-build-master version=0.0.1
+make docker-build-worker version=0.0.1
+```
+
 ### Api
 
+<details>
+<summary>展开查看</summary>
+<pre><code>
 - 获取所有任务
 
 `GET /v1/task`
@@ -155,5 +167,7 @@ $ curl -X GET "http://127.0.0.1:9528/v1/log" | jq
   }
 }
 ```
+</code></pre>
+</details>
 
 ![terminal-01.png](./images/terminal-01.png)

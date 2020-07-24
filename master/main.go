@@ -7,13 +7,13 @@ package main
 
 import (
 	"clock/config"
-	"clock/master/param"
 	"clock/master/server"
 	"clock/storage"
 	"flag"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"os"
+
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -41,11 +41,11 @@ func main() {
 
 	// 设置配置文件和静态变量
 	config.SetConfig(filePath)
-	param.SetStatic()
-	storage.SetDb()
+	if err := storage.SetDb(); err != nil {
+		logrus.Fatalf("[main] set up error: %v", err)
+	}
 
-	defer storage.Db.Close()
-	defer storage.Rdb.Close()
+	defer storage.RevokeDb()
 	address := config.Config.GetString("server.host")
 	if address == "" {
 		logrus.Fatal("can not find any server host config")
