@@ -109,13 +109,21 @@ make docker-build-worker version=0.0.1
 $ curl -X PUT \
   http://127.0.0.1:9528/v1/task \
   -H 'Content-Type: application/json' \
-  -d '{
-    "command": "sleep 5;echo job10",
-    "name": "job1",
-    "log_enable": true,
-    "expression": "*/3 * * * * *"
-}'
-{"code":200,"msg":"success","data":1}
+   -d '{
+     "name": "job1",
+     "log_enable": true,
+     "expression": "*/3 * * * * *",
+     "disable": true,
+     "payload": {
+     	"command": "sleep 5;echo helloworld"
+     },
+     "type": "bash"
+ }'
+{
+    "code": 200,
+    "msg": "success",
+    "data": "5f1b2b7e527c93ca9e950d0b"
+}
 ```
 
 ```json
