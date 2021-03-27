@@ -5,8 +5,17 @@ import (
 )
 
 //SchedulerDeleteTask 调度器删除对应任务
-func NewSchedulerDeleteTask(t Task) error {
-	cronScheduler.RemoveTask(&t)
+func NewSchedulerDeleteTask(t interface{}) error {
+	switch t.(type) {
+	case Task:
+		task := t.(Task)
+		cronScheduler.RemoveTask(&task)
+	case string:
+		tid := t.(string)
+		cronScheduler.RemoveTaskByTid(tid)
+	default:
+		log.Printf("不支持的类型")
+	}
 	return nil
 }
 

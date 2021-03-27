@@ -48,6 +48,20 @@ func (c *CronScheduler) PutTaskEntryId(tid string, id cron.EntryID) {
 	c.tasks[tid] = id
 }
 
+//RemoveTask 删除定时器中的定时任务 根据 tid
+func (c *CronScheduler) RemoveTaskByTid(tid string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entryId := c.tasks[tid] // if key not exists, value is zero
+	log.Infof("job %s, entryId is %v, now remove\n", tid, entryId)
+	if entryId != 0 {
+		c.scheduler.Remove(entryId)
+	} else {
+		log.Infof("job %s, entryId is %v, 不需要进行调度器任务删除\n", tid, entryId)
+	}
+	return
+}
+
 //RemoveTask 删除定时器中的定时任务
 func (c *CronScheduler) RemoveTask(t *Task) {
 	c.mu.Lock()
@@ -56,6 +70,8 @@ func (c *CronScheduler) RemoveTask(t *Task) {
 	log.Infof("job %s-%s, entryId is %v\n", t.Tid, t.Name, entryId)
 	if entryId != 0 {
 		c.scheduler.Remove(entryId)
+	} else {
+		log.Infof("job %s-%s, entryId is %v, 不需要进行调度器任务删除\n", t.Tid, t.Name, entryId)
 	}
 	return
 }

@@ -141,6 +141,9 @@ type (
 	}
 
 	// redis 传输对象
+	// 原先是一整个 Task 后续应该是考虑减少传输数据大小以及
+	// task 不好构建(例如修改一个 task，需要传给 redis 的则是更新后的 task, 需要在 master 进行重新查找)
+	// 不过这样删除 task 的时候，worker 可能会找不到数据，因为在 master 中这条数据已经被操作删除了 所以需要进行一下处理
 	TaskEvent struct {
 		Event int    `json:"event"`
 		Tid   string `json:"tid"`

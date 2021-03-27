@@ -119,7 +119,13 @@ func (r *RedisCache) Subscribe(c chan os.Signal) {
 			task, err := GetTask(t.Tid)
 			if err != nil {
 				log.Errorf("[scheduler] task %s not found", t.Tid)
-				continue
+				if t.Event == DELETE { // 删除事件特殊处理 数据可能已经被 master 删除了
+					if err := NewSchedulerDeleteTask(t.Tid); err != nil {
+						log.Errorf("[scheduler] DELETE 事件失败 %s", err.Error())
+					}
+					log.Infof("[scheduler] DELETE %d 事件处理成功", DELETE)
+				}
+				continue // 肯定是要 continue 的 后面的不用走
 			}
 			switch t.Event {
 			case CREATE:
