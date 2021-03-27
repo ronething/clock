@@ -1,7 +1,7 @@
 package server
 
 import (
-	"clock/master/controller"
+	"clock/v3/master/controller"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"

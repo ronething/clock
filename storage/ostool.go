@@ -2,7 +2,7 @@ package storage
 
 import (
 	"bytes"
-	"clock/config"
+	"clock/v3/config"
 	"context"
 	"fmt"
 	"strings"

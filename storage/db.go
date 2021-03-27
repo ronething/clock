@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"clock/config"
+	"clock/v3/config"
 	"context"
 	"time"
 

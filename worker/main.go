@@ -6,9 +6,9 @@
 package main
 
 import (
-	"clock/config"
-	"clock/storage"
-	"clock/worker/scheduler"
+	"clock/v3/config"
+	"clock/v3/storage"
+	"clock/v3/worker/scheduler"
 	"flag"
 	"fmt"
 	"os"

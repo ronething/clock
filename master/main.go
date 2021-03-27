@@ -6,9 +6,9 @@
 package main
 
 import (
-	"clock/config"
-	"clock/master/server"
-	"clock/storage"
+	"clock/v3/config"
+	"clock/v3/master/server"
+	"clock/v3/storage"
 	"flag"
 	"fmt"
 	"os"

@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"clock/master/param"
+	"clock/v3/master/param"
 	"fmt"
 	"net/http"
 	"time"

@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"clock/master/param"
+	"clock/v3/master/param"
 	"context"
 	"fmt"
 	"net/http"
@@ -11,7 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 
-	"clock/storage"
+	"clock/v3/storage"
 )
 
 //GetMessages

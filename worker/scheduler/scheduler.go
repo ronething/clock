@@ -6,8 +6,8 @@
 package scheduler
 
 import (
-	"clock/config"
-	"clock/storage"
+	"clock/v3/config"
+	"clock/v3/storage"
 	"context"
 	"log"
 	"os"

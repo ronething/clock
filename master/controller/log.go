@@ -7,8 +7,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 
-	"clock/master/param"
-	"clock/storage"
+	"clock/v3/master/param"
+	"clock/v3/storage"
 )
 
 //GetLogs 列表
