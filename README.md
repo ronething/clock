@@ -8,7 +8,10 @@
     - [direct](#direct)
     - [build binary](#build-binary)
     - [build docker image](#build-docker-image)
-  - [Api](#api)
+  - [api](#api)
+    - [任务相关](#%E4%BB%BB%E5%8A%A1%E7%9B%B8%E5%85%B3)
+    - [日志相关](#%E6%97%A5%E5%BF%97%E7%9B%B8%E5%85%B3)
+    - [监控相关](#%E7%9B%91%E6%8E%A7%E7%9B%B8%E5%85%B3)
   - [curl sample](#curl-sample)
   - [acknowledgement](#acknowledgement)
 
@@ -78,11 +81,10 @@ make docker-build-master version=0.0.1
 make docker-build-worker version=0.0.1
 ```
 
-### Api
+### api
 
-<details>
-<summary>展开查看</summary>
-<pre><code>
+#### 任务相关
+
 - 获取所有任务
 
 `GET /v1/task`
@@ -91,21 +93,31 @@ make docker-build-worker version=0.0.1
 
 `GET /v1/task/:tid`
 
-- 更新单个任务
+- 启停任务
 
-`PUT /v1/task`
+`PUT /v1/task/disable`
+
+- 变更任务定时表达式和时区
+
+`PUT /v1/task/newspec`
 
 - 删除单个任务
 
 `DEL /v1/task/:tid`
 
-- 获取日志
+#### 日志相关
 
 `GET /v1/log`
 
-</code></pre>
-</details>
+#### 监控相关
 
+- prometheus exporter
+
+`GET /metrics`
+
+- 健康检查
+
+`GET /ping`
 
 ### curl sample
 
