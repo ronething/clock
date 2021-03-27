@@ -3,10 +3,9 @@ module clock/v3
 go 1.14
 
 require (
-	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/fatih/structs v1.1.0
-	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/fsnotify/fsnotify v1.4.9
+	github.com/globocom/echo-prometheus v0.1.2
 	github.com/go-redis/redis/v8 v8.0.0-beta.6
 	github.com/golang/protobuf v1.5.1 // indirect
 	github.com/labstack/echo/v4 v4.1.16
@@ -14,9 +13,9 @@ require (
 	github.com/mitchellh/mapstructure v1.3.2 // indirect
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/pelletier/go-toml v1.8.0 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.1.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/shirou/gopsutil v2.20.6+incompatible
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/afero v1.3.1 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
@@ -28,7 +27,7 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.mongodb.org/mongo-driver v1.3.5
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899 // indirect
-	golang.org/x/net v0.0.0-20210326220855-61e056675ecf
+	golang.org/x/net v0.0.0-20210326220855-61e056675ecf // indirect
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9 // indirect
 	golang.org/x/sys v0.0.0-20210326220804-49726bf1d181 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect

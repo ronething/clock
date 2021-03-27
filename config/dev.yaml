@@ -1,9 +1,11 @@
 server:
   host: 0.0.0.0:9528
+  worker: 0.0.0.0:9529 # for prometheus metrics
 
 log:
   level: debug
-  filepath: "dev.log"
+  caller: false
+  jsonformat: false
 
 database:
   mongo:
@@ -21,13 +23,7 @@ lease:
   per: 20 # 周期 s
   expire: 120 # 每次续约多久 s
 
-scheduler:
-  timezone: "Asia/Shanghai"
-
-# TODO: 加个开关，如果关了 master 就不发布到 redis
+# DONE: 加个开关，如果关了 master 就不发布到 redis
 pubsub:
   channel: "cron"
-#  open: true
-
-message:
-  size: 1000
+  open: true

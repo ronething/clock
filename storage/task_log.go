@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -31,7 +31,7 @@ func GetLogs(query *LogQuery) ([]TaskLog, error) {
 
 	count, err := TaskLogCol.CountDocuments(context.Background(), queryDB.Map())
 	if err != nil {
-		logrus.Errorf("[model] failed to get the page total of logs : %v", err.Error())
+		log.Errorf("[model] failed to get the page total of logs : %v", err.Error())
 		return logs, err
 	}
 	query.Total = int(count)
@@ -45,11 +45,11 @@ func GetLogs(query *LogQuery) ([]TaskLog, error) {
 
 	cursor, err := TaskLogCol.Find(context.Background(), queryDB.Map(), opts)
 	if err != nil {
-		logrus.Errorf("[model] get logs err: %v", err)
+		log.Errorf("[model] get logs err: %v", err)
 		return logs, err
 	}
 	if err = cursor.All(context.Background(), &logs); err != nil {
-		logrus.Errorf("[model] decode all logs err: %v", err)
+		log.Errorf("[model] decode all logs err: %v", err)
 		return logs, err
 	}
 
@@ -70,9 +70,9 @@ func DeleteLogs(query *LogQuery) error {
 
 	res, err := TaskLogCol.DeleteMany(context.Background(), queryDB)
 	if err != nil {
-		logrus.Errorf("[model] delete logs err: %v", err)
+		log.Errorf("[model] delete logs err: %v", err)
 		return err
 	}
-	logrus.Debugf("[model] delete logs count: %d", res.DeletedCount)
+	log.Debugf("[model] delete logs count: %d", res.DeletedCount)
 	return nil
 }

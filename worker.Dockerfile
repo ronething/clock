@@ -22,5 +22,7 @@ RUN mkdir $WORKDIR/bin
 # dst WORKDIR 后面的 / 需要加
 COPY --from=BuildImage $WORKDIR/bin/* $WORKDIR/
 
+EXPOSE 9529
+
 # TODO: 分环境/加个 release
 CMD ./worker -c $WORKDIR/dev.yaml

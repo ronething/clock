@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
-	"github.com/sirupsen/logrus"
-
 	"clock/v3/master/param"
 	"clock/v3/storage"
+
+	"github.com/labstack/echo/v4"
 )
 
 //GetLogs 列表
@@ -18,16 +17,16 @@ func GetLogs(c echo.Context) (err error) {
 	resp := param.BuildResp()
 
 	if err := c.Bind(&query); err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[get logs] error to get the query param with: %v", err)
-		logrus.Error(resp.Msg)
-		return c.JSON(http.StatusBadRequest, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	logs, err := storage.GetLogs(&query)
 	if err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[get logs] error to get the logs: %v", err)
-		logrus.Error(resp.Msg)
-		return c.JSON(http.StatusBadRequest, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	page := param.ListResponse{
@@ -47,9 +46,9 @@ func DeleteLogs(c echo.Context) error {
 	resp := param.BuildResp()
 
 	if err := c.Bind(&query); err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[delete logs] error to get the query param with: %v", err)
-		logrus.Error(resp.Msg)
-		return c.JSON(http.StatusBadRequest, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	// 异步执行

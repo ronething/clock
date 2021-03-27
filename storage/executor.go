@@ -9,16 +9,17 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
+
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 func RunBashTask(t Task) error {
-	logrus.Debugf("[ostool] execute job %s", t.Name)
+	log.Debugf("[ostool] execute job name: %s, tid: %s", t.Name, t.Tid)
 	// DONE: 分布式锁
-	jobDone, err := TryLock(t)
+	jobDone, err := RCache.TryLock(t)
 	if err != nil {
-		logrus.Errorf("[ostool] 加锁失败: %v", err)
+		log.Errorf("[ostool] 加锁失败: %v", err)
 		return err // 在 defer 之前 return，并不会执行 defer 的内容
 	}
 
@@ -26,13 +27,11 @@ func RunBashTask(t Task) error {
 	var stdErrBuf bytes.Buffer
 	start := time.Now().Unix()
 
-	// 保存最后状态
-	t.Status = START
 	defer func() {
 		jobDone <- 1 // 完成 job
 		end := time.Now().Unix()
 		t.UpdateAt = time.Now().Unix()
-		logrus.Debugf("[%v] - now finish task [%s]", t.Tid, t.Name)
+		log.Debugf("[%v] - now finish task [%s]", t.Tid, t.Name)
 		res, err := TaskCol.UpdateOne(context.Background(), bson.D{{"_id", t.Id}}, bson.D{
 			{
 				"$set",
@@ -40,22 +39,21 @@ func RunBashTask(t Task) error {
 			},
 		})
 		if err != nil {
-			logrus.Errorf("[ostool] update task %s err: %v", t.Tid, err)
+			log.Errorf("[ostool] update task %s err: %v", t.Tid, err)
 			return
 		}
-		logrus.Debugf("[ostool] update task %s, match: %v, modify: %v",
+		log.Debugf("[ostool] update task %s, match: %v, modify: %v",
 			t.Tid, res.MatchedCount, res.ModifiedCount)
-		saveLog(t, &stdOutBuf, &stdErrBuf, start, end)
+		go saveLog(t, &stdOutBuf, &stdErrBuf, start, end)
 	}()
 
 	command := t.Payload["command"].(string)
 
 	if command == "" {
-		t.Status = FAILURE
 		return errors.New("please do not input the empty command")
 	}
 
-	logrus.Debugf("[%v] - now will run the task [%s]", t.Tid, t.Name)
+	log.Debugf("[%v] - now will run the task [%s]", t.Tid, t.Name)
 
 	c := exec.Command("/bin/bash", "-c", command)
 	c.Stdout = &stdOutBuf
@@ -74,7 +72,7 @@ func RunBashTask(t Task) error {
 			// TODO: 新建进程组 kill
 			_ = c.Process.Kill()
 			err := errors.New(fmt.Sprintf("cmd %s reach to timeout limit", command))
-			logrus.Errorln(err.Error())
+			log.Error(err.Error())
 			stdErrBuf.WriteString(err.Error())
 			return err
 		case <-done:
@@ -84,22 +82,20 @@ func RunBashTask(t Task) error {
 
 	e := c.Run()
 	if e != nil {
-		logrus.Errorf("[ostool] run task err: %v", e)
+		log.Errorf("[ostool] run task err: %v", e)
 		// 写入错误信息
 		stdErrBuf.WriteString(e.Error())
-		t.Status = FAILURE
 		return e
 	}
 
-	t.Status = SUCCESS
 	return nil
 
 }
 
 //RunHTTPTask 请求 http 执行任务
-func RunHTTPTask(t Task) error {
-	logrus.Debugf("run task %s", t.Tid)
-	jobDone, err := TryLock(t)
+func RunHTTPTask(t Task, now string) error {
+	log.Debugf("[ostool] execute job name: %s, tid: %s", t.Name, t.Tid)
+	jobDone, err := RCache.TryLock(t)
 	if err != nil {
 		return err
 	}
@@ -107,18 +103,22 @@ func RunHTTPTask(t Task) error {
 		jobDone <- 1
 	}()
 
+	// 拼接 url
 	endpoint := t.Payload["endpoint"].(string)
 	prefix := t.Payload["prefix"].(string)
 	url := endpoint + prefix
-	logrus.Debugf("[executor] url is %s", url)
+	log.Debugf("[executor] url is %s", url)
 	data, ok := t.Payload["data"].(map[string]interface{})
 	if !ok {
-		return errors.New("[executor] data 不是 map[string]interface{} 类型")
+		data = make(map[string]interface{})
+		//return errors.New("[executor] data 不是 map[string]interface{} 类型")
 	}
-	logrus.Debugf("[executor] data is %v", data)
+	log.Debugf("[executor] data is %v", data)
+	// 加入 delay 时间到 data 中
+	data["delay"] = now
 	b, err := json.Marshal(data)
 	if err != nil {
-		logrus.Errorf("[executor] data 序列化失败", err)
+		log.Errorf("[executor] data 序列化失败 %v", err)
 		return err
 	}
 	method := t.Payload["method"].(string)
@@ -132,9 +132,8 @@ func RunHTTPTask(t Task) error {
 	}
 
 	end := time.Now().Unix()
-	t.Status = SUCCESS
 	t.UpdateAt = time.Now().Unix()
-	logrus.Debugf("[%v] - now finish task [%s]", t.Tid, t.Name)
+	log.Debugf("[%v] - now finish task [%s]", t.Tid, t.Name)
 	res, err := TaskCol.UpdateOne(context.Background(), bson.D{{"_id", t.Id}}, bson.D{
 		{
 			"$set",
@@ -142,12 +141,12 @@ func RunHTTPTask(t Task) error {
 		},
 	})
 	if err != nil {
-		logrus.Errorf("[ostool] update task %s err: %v", t.Tid, err)
+		log.Errorf("[ostool] update task %s err: %v", t.Tid, err)
 		return err
 	}
-	logrus.Debugf("[ostool] update task %s, match: %v, modify: %v",
+	log.Debugf("[ostool] update task %s, match: %v, modify: %v",
 		t.Tid, res.MatchedCount, res.ModifiedCount)
-	saveLog(t, bytes.NewBuffer([]byte(resp.Body)), bytes.NewBuffer([]byte("")), start, end)
+	go saveLog(t, bytes.NewBuffer([]byte(resp.Body)), bytes.NewBuffer([]byte("")), start, end)
 
 	return nil
 }

@@ -1,8 +1,7 @@
 package config
 
 import (
-	"path/filepath"
-
+	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -18,29 +17,45 @@ func SetConfig(filePath string) {
 		log.Fatalf("[config] read config err: %v", err)
 	}
 
-	// set log by default
-	setLog()
+	initLog()
+	watchFileConfig()
 }
 
-// set log level
-func setLog() {
-	l := Config.Get("log.level")
+func initLog() {
 
-	if l == "" {
-		log.SetLevel(log.InfoLevel)
-	} else if l == "debug" {
+	level := Config.GetString("log.level")
+	switch level {
+	case "debug":
 		log.SetLevel(log.DebugLevel)
-	} else if l == "error" {
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warning":
+		log.SetLevel(log.WarnLevel)
+	case "error":
 		log.SetLevel(log.ErrorLevel)
-	} else {
+	default:
 		log.SetLevel(log.InfoLevel)
 	}
 
+	caller := Config.GetBool("log.caller")
+	log.SetReportCaller(caller)
+	jsonFormat := Config.GetBool("log.jsonformat")
+	log.SetFormatter(func() log.Formatter {
+		if jsonFormat {
+			return &log.JSONFormatter{}
+		} else {
+			return &log.TextFormatter{}
+		}
+	}())
 }
 
-func relativePath(basedir string, path *string) {
-	p := *path
-	if len(p) > 0 && p[0] != '/' {
-		*path = filepath.Join(basedir, p)
-	}
+//watchFileConfig 监听文件变化
+func watchFileConfig() {
+	Config.WatchConfig()
+	Config.OnConfigChange(func(e fsnotify.Event) {
+		log.Warnf("config file change: %v %v", e.Name, e.Op)
+		if e.Op == fsnotify.Write {
+			initLog()
+		}
+	})
 }

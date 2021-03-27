@@ -1,47 +1,14 @@
 package controller
 
 import (
-	"errors"
-	"fmt"
-	"net/http"
-	"strconv"
-	"time"
-
 	"clock/v3/master/param"
 	"clock/v3/storage"
+	"fmt"
+	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/net/websocket"
+	log "github.com/sirupsen/logrus"
 )
-
-func getPathInt(c echo.Context, key string) (int, error) {
-	value := c.Param(key)
-	if value == "" {
-		return 0, errors.New("can not find any param from query ")
-	}
-
-	intValue, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, err
-	}
-
-	return intValue, nil
-}
-
-func getQueryInt(c echo.Context, key string) (int, error) {
-	value := c.QueryParam(key)
-	if value == "" {
-		return 0, errors.New("can not find any param from query ")
-	}
-
-	intValue, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, err
-	}
-
-	return intValue, nil
-}
 
 // 列表
 func GetTasks(c echo.Context) (err error) {
@@ -50,18 +17,16 @@ func GetTasks(c echo.Context) (err error) {
 	resp := param.BuildResp()
 
 	if err := c.Bind(&query); err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[get tasks] error to get the task param with: %v", err)
-		logrus.Error(resp.Msg)
-
-		return c.JSON(http.StatusBadRequest, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	tasks, err := storage.GetTasks(&query)
 	if err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[get tasks] error to get the task from db with: %v", err)
-		logrus.Error(resp.Msg)
-
-		return c.JSON(http.StatusBadRequest, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	page := param.ListResponse{
@@ -79,12 +44,11 @@ func GetTask(c echo.Context) (err error) {
 
 	taskId := c.Param("tid") // ObjectID
 
-	t, e := storage.GetTask(taskId)
-	if e != nil {
+	t, err := storage.GetTask(taskId)
+	if err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[get task] error to query the task with: %v", err)
-		logrus.Error(resp.Msg)
-
-		return c.JSON(http.StatusNotFound, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	resp.Data = t
@@ -92,56 +56,36 @@ func GetTask(c echo.Context) (err error) {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// 更新或新增一个task
-func PutTask(c echo.Context) error {
+//PostTask 新增一个 task
+func PostTask(c echo.Context) error {
+
 	resp := param.BuildResp()
 
 	t := storage.Task{}
-
 	if err := c.Bind(&t); err != nil {
-		resp.Msg = fmt.Sprintf("[put task] invalidate param found: %v", err)
-		logrus.Error(resp.Msg)
-
-		return c.JSON(http.StatusBadRequest, resp)
+		resp.Code = param.Failed
+		resp.Msg = fmt.Sprintf("[post task] invalidate param found: %v", err)
+		return c.JSON(http.StatusOK, resp)
 	}
 
-	if err := storage.PutTask(&t); err != nil {
-		resp.Msg = fmt.Sprintf("[put task] error to query task from db with: %v", err)
-		logrus.Error(resp.Msg)
-
-		return c.JSON(http.StatusBadRequest, resp)
+	if err := storage.PostTask(&t); err != nil {
+		resp.Code = param.Failed
+		resp.Msg = fmt.Sprintf("[post task] err: %v", err)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	resp.Data = t.Tid
 	return c.JSON(http.StatusOK, resp)
 }
 
-// GetTaskStatus 得到当前任务状态 websocket
-func GetTaskStatus(c echo.Context) error {
-	websocket.Handler(func(ws *websocket.Conn) {
-		defer ws.Close()
-		for {
-			time.Sleep(50 * time.Millisecond)
-			select {
-			case msg := <-storage.Messenger.Channel:
-				websocket.Message.Send(ws, msg)
-			default:
-				continue
-			}
-		}
-	}).ServeHTTP(c.Response(), c.Request())
-	return nil
-}
-
 func RunTask(c echo.Context) error {
-	taskId := c.QueryParam("tid")
+	taskId := c.Param("tid")
 	resp := param.BuildResp()
 
 	if err := storage.RunTask(taskId); err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[run task] error run task with: %v", err)
-		logrus.Error(resp.Msg)
-
-		return c.JSON(http.StatusBadRequest, resp)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -153,10 +97,54 @@ func DeleteTask(c echo.Context) error {
 	resp := param.BuildResp()
 
 	if err := storage.DeleteTask(taskId); err != nil {
+		resp.Code = param.Failed
 		resp.Msg = fmt.Sprintf("[delete task] error to delete task with:%v", err)
-		logrus.Error(err)
+		return c.JSON(http.StatusOK, resp)
+	}
 
-		return c.JSON(http.StatusBadRequest, resp)
+	return c.JSON(http.StatusOK, resp)
+}
+
+//DisableTask 禁用/启动任务
+func DisableTask(c echo.Context) error {
+	taskId := c.Param("tid")
+	resp := param.BuildResp()
+
+	t := param.DisableTask{}
+
+	if err := c.Bind(&t); err != nil {
+		resp.Msg = fmt.Sprintf("[disable task] error to query task from db with: %v", err)
+		resp.Code = param.Failed
+		return c.JSON(http.StatusOK, resp)
+	}
+
+	if err := storage.DisableTask(taskId, storage.Struct2bsonD(t, "json").Map()); err != nil {
+		resp.Msg = fmt.Sprintf("[disable task] error to query task from db with: %v", err)
+		log.Error(resp.Msg)
+
+		return c.JSON(http.StatusOK, resp)
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+//NewSpecTask 修改任务表达式以及时区
+func NewSpecTask(c echo.Context) error {
+	taskId := c.Param("tid")
+	resp := param.BuildResp()
+
+	t := param.NewSpecTask{}
+
+	if err := c.Bind(&t); err != nil {
+		resp.Msg = fmt.Sprintf("[spec task] error to query task from db with: %v", err)
+		resp.Code = param.Failed
+		return c.JSON(http.StatusOK, resp)
+	}
+
+	if err := storage.ModifyTask(taskId, storage.Struct2bsonD(t, "json").Map()); err != nil {
+		resp.Msg = fmt.Sprintf("[spec task] error to query task from db with: %v", err)
+		log.Error(resp.Msg)
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	return c.JSON(http.StatusOK, resp)

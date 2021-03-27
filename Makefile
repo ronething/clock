@@ -1,17 +1,27 @@
 # 构建脚本
 
+export GO111MODULE=on
+export GOPROXY=https://goproxy.io
+
 # set-env copy-config 在这里被依赖 在 build-master 和 build-worker 也被依赖，但是不会执行两次
 .PHONY: build
-build: set-env copy-config build-master build-worker
+build: set-env copy-config build-master upx-master build-worker upx-worker
 
+# mac date doesn't have --rfc-3339=seconds
 .PHONY: build-master
 build-master: set-env copy-config
-	go build -v -o bin/master master/main.go
+	go build -v -ldflags "-X 'main.goVersion=$$(go version)' \
+	-X 'main.gitHash=$$(git show -s --format=%H)' \
+	-X 'main.buildTime=$$(date)'" \
+	-o bin/master master/main.go
 	@echo "build master success"
 
 .PHONY: build-worker
 build-worker: set-env copy-config
-	go build -v -o bin/worker worker/main.go
+	go build -v -ldflags "-X 'main.goVersion=$$(go version)' \
+	-X 'main.gitHash=$$(git show -s --format=%H)' \
+	-X 'main.buildTime=$$(date)'" \
+	-o bin/worker worker/main.go
 	@echo "build worker success"
 
 .PHONY: copy-config
@@ -21,8 +31,6 @@ copy-config:
 
 .PHONY: set-env
 set-env:
-	export GO111MODULE=on
-	export GOPROXY=https://goproxy.io
 	@echo "set env success"
 
 .PHONY: docker-build-master

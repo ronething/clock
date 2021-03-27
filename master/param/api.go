@@ -1,5 +1,10 @@
 package param
 
+const (
+	Success = 0
+	Failed  = -1
+)
+
 // 请求
 type (
 	Page struct {
@@ -22,12 +27,22 @@ type (
 		Items     interface{} `json:"items"`
 		PageQuery interface{} `json:"page"`
 	}
+
+	DisableTask struct {
+		Disable bool `json:"disable"`
+	}
+
+	//新的修改任务 api
+	NewSpecTask struct {
+		Expression string `json:"expression"`
+		Timezone   string `json:"timezone"`
+	}
 )
 
 //BuildResp 通用 resp
 func BuildResp() ApiResponse {
 	return ApiResponse{
-		Code: 200,
+		Code: Success, // 成功为 0 不成功为 -1
 		Msg:  "success",
 		Data: nil,
 	}
